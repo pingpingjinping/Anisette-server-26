@@ -1,0 +1,17 @@
+name: Keeper auth ARM64 check
+on:
+  push:
+    branches: [codex/keeper-auth-20261024]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and check the ARM64 image
+        run: |
+          docker build -t anisette-keeper-auth:check .
+          docker run --rm anisette-keeper-auth:check --help
