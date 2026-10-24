@@ -35,9 +35,12 @@ import provision.androidlibrary;
 __gshared string libraryPath;
 __gshared string provisioningPath;
 __gshared string activeClientInfo;
+__gshared string activeUserAgent;
 
 enum brandingCode = format!"anisette-v3-server v%s"(provisionVersion);
-enum defaultClientInfo = "<Mac17,3> <macOS;27.0;26A5416b> <com.apple.AuthKit/1 (com.apple.dt.Xcode/25183.54.10)>";
+// Same defaults as AltKeeper's vendor/isideload RemoteV3AnisetteProvider.
+enum defaultClientInfo = "<Mac15,7> <macOS;27.0;26A5378j> <com.apple.AuthKit/1 (com.apple.akd/1.0)>";
+enum defaultUserAgent = "AuthKit/1 (Macintosh; OS X 26.5.2) (com.apple.dt.Xcode/26.0)";
 enum dsId = -2;
 
 __gshared ADI v1Adi;
@@ -59,6 +62,7 @@ int main(string[] args) {
 	// returned by anisette servers. Allow the identity to be updated without
 	// rebuilding the image, while using a coherent modern identity by default.
 	activeClientInfo = process.environment.get("ANISETTE_CLIENT_INFO", defaultClientInfo);
+	activeUserAgent = process.environment.get("ANISETTE_USER_AGENT", defaultUserAgent);
 	log.infoF!"Using X-MMe-Client-Info: %s"(activeClientInfo);
 	string hostname = "0.0.0.0";
 	ushort port = 6969;
@@ -207,7 +211,7 @@ class AnisetteService {
 		import core.time;
 		auto log = getLogger();
 		log.info("[<<] anisette-v1 request");
-		auto time = Clock.currTime();
+		auto time = Clock.currTime(UTC());
 
 		if (!v1Adi.isMachineProvisioned(dsId)) {
 			ProvisioningSession provisioningSession = new ProvisioningSession(v1Adi, v1Device);
@@ -221,21 +225,22 @@ class AnisetteService {
 		import std.json;
 
 		JSONValue responseJson = [
-			"X-Apple-I-Client-Time": time.toISOExtString.split('.')[0] ~ "Z",
+			"X-Apple-I-Client-Time": format!"%04d-%02d-%02dT%02d:%02d:%02dZ"(
+				time.year, cast(int) time.month, time.day, time.hour, time.minute, time.second),
 			"X-Apple-I-MD":  Base64.encode(otp.oneTimePassword),
 			"X-Apple-I-MD-M": Base64.encode(otp.machineIdentifier),
 			"X-Apple-I-MD-RINFO": to!string(17106176),
 			"X-Apple-I-MD-LU": v1Device.localUserUUID,
 			"X-Apple-I-SRL-NO": "C0FFFFFFFFFFFF",
 			"X-MMe-Client-Info": v1Device.serverFriendlyDescription,
-			"X-Apple-I-TimeZone": time.timezone.dstName,
+			"X-Apple-I-TimeZone": "UTC",
 			"X-Apple-Locale": "en_US",
 			"X-Mme-Device-Id": v1Device.uniqueDeviceIdentifier,
 		];
 
 		res.headers["Implementation-Version"] = brandingCode;
 		res.writeBody(responseJson.toString(JSONOptions.doNotEscapeSlashes), "application/json");
-		log.infoF!"[>>] 200 OK %s"(responseJson);
+		log.info("[>>] 200 OK (anisette values redacted)");
 	}
 
 	@method(HTTPMethod.GET)
@@ -245,7 +250,7 @@ class AnisetteService {
 		log.info("[<<] anisette-v3 /v3/client_info");
 		JSONValue responseJson = [
 			"client_info": activeClientInfo,
-			"user_agent": "akd/1.0 CFNetwork/808.1.4"
+			"user_agent": activeUserAgent
 		];
 
 		res.headers["Implementation-Version"] = brandingCode;
